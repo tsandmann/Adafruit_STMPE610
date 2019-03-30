@@ -16,12 +16,14 @@
  *  Written by Limor Fried/Ladyada for Adafruit Industries.
  *
  *  MIT license, all text above must be included in any redistribution
+ *
+ *  Updated to work with Teensy 3.6 by Timo Sandmann
  */
 
 #ifndef _ADAFRUIT_STMPE610H_
 #define _ADAFRUIT_STMPE610H_
 
-#include "Arduino.h"
+#include <Arduino.h>
 
 #include <SPI.h>
 #include <Wire.h>
@@ -134,15 +136,15 @@
  */
 class TS_Point {
 public:
-  TS_Point();
-  TS_Point(int16_t x, int16_t y, int16_t z);
+    TS_Point();
+    TS_Point(int16_t x, int16_t y, int16_t z);
 
-  bool operator==(TS_Point);
-  bool operator!=(TS_Point);
+    bool operator==(TS_Point p1);
+    bool operator!=(TS_Point p1);
 
-  int16_t x; /**< x coordinate **/
-  int16_t y; /**< y coordinate **/
-  int16_t z; /**< z coordinate **/
+    int16_t x; /**< x coordinate **/
+    int16_t y; /**< y coordinate **/
+    int16_t z; /**< z coordinate **/
 };
 
 /*!
@@ -151,33 +153,52 @@ public:
  */
 class Adafruit_STMPE610 {
 public:
-  Adafruit_STMPE610(uint8_t cspin, uint8_t mosipin, uint8_t misopin,
-                    uint8_t clkpin);
-  Adafruit_STMPE610(uint8_t cspin, SPIClass *theSPI = &SPI);
-  Adafruit_STMPE610(TwoWire *theWire = &Wire);
+    Adafruit_STMPE610(uint8_t cspin, uint8_t mosipin, uint8_t misopin, uint8_t clkpin);
+    Adafruit_STMPE610(uint8_t cspin, SPIClass* theSPI = &SPI);
+    Adafruit_STMPE610(TwoWire* theWire = &Wire);
 
-  boolean begin(uint8_t i2caddr = STMPE_ADDR);
+    bool begin(uint8_t i2caddr = STMPE_ADDR);
 
-  void writeRegister8(uint8_t reg, uint8_t val);
-  uint16_t readRegister16(uint8_t reg);
-  uint8_t readRegister8(uint8_t reg);
-  void readData(uint16_t *x, uint16_t *y, uint8_t *z);
-  uint16_t getVersion();
-  boolean touched();
-  boolean bufferEmpty();
-  uint8_t bufferSize();
-  TS_Point getPoint();
+    void writeRegister8(uint8_t reg, uint8_t val) const;
+    // uint16_t readRegister16(uint8_t reg) const;
+    uint8_t readRegister8(uint8_t reg) const;
+    void readData(uint16_t* x, uint16_t* y, uint8_t* z) const;
+    uint16_t getVersion() const;
+    bool touched() const;
+    bool bufferEmpty() const;
+    uint8_t bufferSize() const;
+    TS_Point getPoint() const;
 
 private:
-  uint8_t spiIn();
-  void spiOut(uint8_t x);
+    /**
+     * @brief Reads SPI data
+     */
+    uint8_t spiIn() const {
+        if (_CLK == -1) {
+            return _spi->transfer(0);
+        } else {
+            return shiftIn(_MISO, _CLK, MSBFIRST);
+        }
+    }
 
-  TwoWire *_wire;
-  SPIClass *_spi;
-  int8_t _CS, _MOSI, _MISO, _CLK;
-  uint8_t _i2caddr;
+    /**
+     * @brief Sends data through SPI
+     * @param x Data to send (one byte)
+     */
+    void spiOut(uint8_t x) const {
+        if (_CLK == -1) {
+            _spi->transfer(x);
+        } else {
+            shiftOut(_MOSI, _CLK, MSBFIRST, x);
+        }
+    }
 
-  int m_spiMode;
+    TwoWire* _wire;
+    SPIClass* _spi;
+    SPISettings _spisettings;
+    const int8_t _CS, _MOSI, _MISO, _CLK;
+    uint8_t _i2caddr;
+    int _spiMode;
 };
 
-#endif
+#endif /* _ADAFRUIT_STMPE610H_ */
