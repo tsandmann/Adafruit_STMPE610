@@ -42,9 +42,9 @@
  *  @param  clkpin
  *          CLK pin
  */
-Adafruit_STMPE610::Adafruit_STMPE610(uint8_t cspin, uint8_t mosipin, uint8_t misopin, uint8_t clkpin)
-    : _wire {}, _spi {}, _CS { static_cast<int8_t>(cspin) }, _MOSI { static_cast<int8_t>(mosipin) }, _MISO { static_cast<int8_t>(misopin) },
-      _CLK { static_cast<int8_t>(clkpin) }, _i2caddr {}, _spiMode {} {}
+Adafruit_STMPE610::Adafruit_STMPE610(uint8_t cspin, uint8_t mosipin, uint8_t misopin, uint8_t clkpin, bool xyz_mode)
+    : _wire {}, _spi {}, xyz_mode_ { xyz_mode }, _CS { static_cast<int8_t>(cspin) }, _MOSI { static_cast<int8_t>(mosipin) },
+      _MISO { static_cast<int8_t>(misopin) }, _CLK { static_cast<int8_t>(clkpin) }, _i2caddr {}, _spiMode {} {}
 
 /*!
  *  @brief  Instantiates a new STMPE610 using provided SPI
@@ -53,16 +53,17 @@ Adafruit_STMPE610::Adafruit_STMPE610(uint8_t cspin, uint8_t mosipin, uint8_t mis
  *  @param  *theSPI
  *          spi object
  */
-Adafruit_STMPE610::Adafruit_STMPE610(uint8_t cspin, SPIClass* theSPI)
-    : _wire {}, _spi { theSPI }, _CS { static_cast<int8_t>(cspin) }, _MOSI { -1 }, _MISO { -1 }, _CLK { -1 }, _i2caddr {}, _spiMode {} {}
+Adafruit_STMPE610::Adafruit_STMPE610(uint8_t cspin, SPIClass* theSPI, bool xyz_mode)
+    : _wire {}, _spi { theSPI }, xyz_mode_ { xyz_mode }, _CS { static_cast<int8_t>(cspin) }, _MOSI { -1 }, _MISO { -1 }, _CLK { -1 }, _i2caddr {}, _spiMode {} {
+}
 
 /*!
  *  @brief  Instantiates a new STMPE610 using provided Wire
  *  @param  *theWire
  *          wire object
  */
-Adafruit_STMPE610::Adafruit_STMPE610(TwoWire* theWire)
-    : _wire { theWire }, _spi {}, _CS { -1 }, _MOSI { -1 }, _MISO { -1 }, _CLK { -1 }, _i2caddr {}, _spiMode {} {}
+Adafruit_STMPE610::Adafruit_STMPE610(TwoWire* theWire, bool xyz_mode)
+    : _wire { theWire }, _spi {}, xyz_mode_ { xyz_mode }, _CS { -1 }, _MOSI { -1 }, _MISO { -1 }, _CLK { -1 }, _i2caddr {}, _spiMode {} {}
 
 /*!
  *  @brief  Setups the HW
@@ -112,19 +113,21 @@ bool Adafruit_STMPE610::begin(uint8_t i2caddr) {
     }
 
     writeRegister8(STMPE_SYS_CTRL2, 0x0); // turn on clocks!
-    writeRegister8(STMPE_TSC_CTRL, STMPE_TSC_CTRL_XYZ | STMPE_TSC_CTRL_EN); // XYZ and enable!
+    writeRegister8(STMPE_TSC_CTRL, (xyz_mode_ ? STMPE_TSC_CTRL_XYZ : STMPE_TSC_CTRL_XY) | STMPE_TSC_CTRL_EN); // XY(Z) and enable!
     // Serial.println(readRegister8(STMPE_TSC_CTRL), HEX);
     writeRegister8(STMPE_INT_EN, STMPE_INT_EN_TOUCHDET);
     writeRegister8(STMPE_ADC_CTRL1, STMPE_ADC_CTRL1_10BIT | (0x6 << 4)); // 96 clocks per conversion
     writeRegister8(STMPE_ADC_CTRL2, STMPE_ADC_CTRL2_6_5MHZ);
     writeRegister8(STMPE_TSC_CFG, STMPE_TSC_CFG_4SAMPLE | STMPE_TSC_CFG_DELAY_1MS | STMPE_TSC_CFG_SETTLE_5MS);
-    writeRegister8(STMPE_TSC_FRACTION_Z, 0x6);
+    if (xyz_mode_) {
+        writeRegister8(STMPE_TSC_FRACTION_Z, 0x6);
+    }
     writeRegister8(STMPE_FIFO_TH, 1);
     writeRegister8(STMPE_FIFO_STA, STMPE_FIFO_STA_RESET);
     writeRegister8(STMPE_FIFO_STA, 0); // unreset
     writeRegister8(STMPE_TSC_I_DRIVE, STMPE_TSC_I_DRIVE_50MA);
     writeRegister8(STMPE_INT_STA, 0xFF); // reset all ints
-    writeRegister8(STMPE_INT_CTRL, STMPE_INT_CTRL_POL_HIGH | STMPE_INT_CTRL_ENABLE);
+    // writeRegister8(STMPE_INT_CTRL, STMPE_INT_CTRL_POL_HIGH | STMPE_INT_CTRL_ENABLE);
 
     return true;
 }
@@ -177,21 +180,45 @@ uint16_t Adafruit_STMPE610::getVersion() const {
  */
 void Adafruit_STMPE610::readData(uint16_t* x, uint16_t* y, uint8_t* z) const {
     uint8_t data[4];
-
-    for (uint8_t i = 0; i < 4; i++) {
+    for (uint8_t i = 0; i < (xyz_mode_ ? 4 : 3); i++) {
         data[i] = readRegister8(0xD7);
         // _spi->transfer(0x00);
         // Serial.print("0x");
         // Serial.print(data[i], HEX);
         // Serial.print(" / ");
     }
+
     *x = data[0];
     *x <<= 4;
     *x |= (data[1] >> 4);
     *y = data[1] & 0x0F;
     *y <<= 8;
     *y |= data[2];
-    *z = data[3];
+    *z = xyz_mode_ ? data[3] : 0;
+}
+
+/*!
+ *  @brief  Reads touchscreen data
+ *  @param  *x
+ *	    The x coordinate
+ *  @param  *y
+ *	    The y coordinate
+ */
+void Adafruit_STMPE610::readData(uint16_t* x, uint16_t* y) const {
+    uint8_t data[3];
+    for (uint8_t i = 0; i < 3; i++) {
+        data[i] = readRegister8(0xD7);
+    }
+    if (xyz_mode_) {
+        readRegister8(0xD7);
+    }
+
+    *x = data[0];
+    *x <<= 4;
+    *x |= (data[1] >> 4);
+    *y = data[1] & 0x0f;
+    *y <<= 8;
+    *y |= data[2];
 }
 
 /*!

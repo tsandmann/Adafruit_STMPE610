@@ -153,9 +153,9 @@ public:
  */
 class Adafruit_STMPE610 {
 public:
-    Adafruit_STMPE610(uint8_t cspin, uint8_t mosipin, uint8_t misopin, uint8_t clkpin);
-    Adafruit_STMPE610(uint8_t cspin, SPIClass* theSPI = &SPI);
-    Adafruit_STMPE610(TwoWire* theWire = &Wire);
+    Adafruit_STMPE610(uint8_t cspin, uint8_t mosipin, uint8_t misopin, uint8_t clkpin, bool xyz_mode = true);
+    Adafruit_STMPE610(uint8_t cspin, SPIClass* theSPI = &SPI, bool xyz_mode = true);
+    Adafruit_STMPE610(TwoWire* theWire = &Wire, bool xyz_mode = true);
 
     bool begin(uint8_t i2caddr = STMPE_ADDR);
 
@@ -163,6 +163,7 @@ public:
     // uint16_t readRegister16(uint8_t reg) const;
     uint8_t readRegister8(uint8_t reg) const;
     void readData(uint16_t* x, uint16_t* y, uint8_t* z) const;
+    void readData(uint16_t* x, uint16_t* y) const;
     uint16_t getVersion() const;
     bool touched() const;
     bool bufferEmpty() const;
@@ -196,6 +197,7 @@ private:
     TwoWire* _wire;
     SPIClass* _spi;
     SPISettings _spisettings;
+    const bool xyz_mode_;
     const int8_t _CS, _MOSI, _MISO, _CLK;
     uint8_t _i2caddr;
     int _spiMode;
